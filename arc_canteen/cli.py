@@ -9,7 +9,7 @@ from rich.table import Table
 from typing import Annotated, Optional
 from datetime import datetime, timezone
 
-from . import config, auth
+from . import config, auth, upgrade
 from . import push as _push
 
 app = typer.Typer(
@@ -130,6 +130,7 @@ def _print_updates(updates: list[dict], full: bool = False) -> None:
 
 @app.callback(invoke_without_command=True)
 def _root(ctx: typer.Context) -> None:
+    upgrade.maybe_print_upgrade_notice()
     if config.is_logged_in():
         if not _push.ping():
             console.print("[yellow](server unreachable — changes will sync when it's back up)[/yellow]")
