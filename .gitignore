@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Secrets — never push these
+*_PAT
+*.pat
+.env
+.env.*
