@@ -576,6 +576,17 @@ def _show_dashboard() -> None:
     else:
         lines.append(f"  {weak} Run [bold]arc-canteen update-product[/bold] to share feature and product updates  [dim](last update {_fmt_date(last_product)})[/dim]")
 
+    # ── Agent context callout (persistent — distinct from the cohort CTAs
+    # above; this is about using arc-canteen for agentic / dev work). ──
+    lines.append("")
+    lines.append("  [dim]Agent context — Arc + Circle developer docs and reference codebases:[/dim]")
+    lines.append("    [dim]docs/[/dim]     docs.arc.network · developers.circle.com · circlefin-skills [dim](~130 pages)[/dim]")
+    lines.append("    [dim]samples/[/dim]  arc-commerce · arc-multichain-wallet · arc-escrow · arc-fintech · arc-p2p-payments")
+    if _context.is_synced():
+        lines.append(f"  {weak} Pipe to your agent:  [bold]arc-canteen context | <agent>[/bold]")
+    else:
+        lines.append(f"  {strong} Run [bold]arc-canteen context sync[/bold] to fetch [dim](first-time)[/dim]")
+
     console.print(Panel("\n".join(lines), title=title, border_style="cyan", padding=(0, 1)))
 
 
