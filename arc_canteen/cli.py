@@ -10,11 +10,21 @@ from typing import Annotated, Optional
 from datetime import datetime, timezone
 
 import json as _json
+from pathlib import Path as _Path
 
 from . import config, auth, upgrade
 from . import push as _push
 from . import rpc as _rpc
 from . import context as _context
+
+# Sourceable env file. login() writes `export RPC=…` here; users add
+# `[ -f ~/.arc-canteen/env ] && . ~/.arc-canteen/env` to their shell rc.
+_SHELL_ENV_FILE = _Path.home() / ".arc-canteen" / "env"
+
+
+def _write_shell_env(rpc_url: str) -> None:
+    _SHELL_ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _SHELL_ENV_FILE.write_text(f"export RPC='{rpc_url}'\n")
 
 app = typer.Typer(
     name="arc-canteen",
@@ -226,6 +236,15 @@ def login() -> None:
         "luma_email": config.get("profile.luma_email"),
     })
 
+    # Persist `export RPC=…` to a sourceable env file before the
+    # quickstart panel — that way the user can act on the instructions
+    # without re-running anything.
+    _server_token = config.get("auth.server_token")
+    if _server_token:
+        _rpc_url = _rpc.url_for_chain(token=_server_token)
+        if _rpc_url:
+            _write_shell_env(_rpc_url)
+
     # Surface the JSON-RPC URL prominently — this is what users
     # actually want to do with the CLI session beyond telemetry.
     _show_rpc_quickstart()
@@ -237,7 +256,10 @@ def login() -> None:
 
 
 def _show_rpc_quickstart() -> None:
-    """Print the JSON-RPC URL + ready-to-paste examples for cast/viem/ethers/web3.py."""
+    """Print the JSON-RPC URL + show how to get it into the user's
+    shell. Login already wrote `export RPC=…` to ~/.arc-canteen/env;
+    the user either sources it for this shell, or adds one line to
+    their rc so every new shell picks it up automatically."""
     token = config.get("auth.server_token")
     if not token:
         return
@@ -253,32 +275,33 @@ def _show_rpc_quickstart() -> None:
         padding=(0, 1),
     ))
     console.print()
-    console.print("[bold]Load into your shell:[/bold]")
-    console.print(f"  [cyan]export RPC='{url}'[/cyan]")
-    console.print("  [dim]# or:[/dim]  [cyan]RPC=$(arc-canteen rpc-url)[/cyan]")
+    console.print(f"[bold]Saved to[/bold] [cyan]~/.arc-canteen/env[/cyan] ([dim]export RPC=…[/dim])")
     console.print()
-    console.print("[bold]foundry / cast:[/bold]")
-    console.print("  [cyan]cast block-number --rpc-url $RPC[/cyan]")
+    console.print("[bold]For this shell:[/bold]")
+    console.print("  [cyan]source ~/.arc-canteen/env[/cyan]")
+    console.print()
+    console.print("[bold]For every new shell[/bold] [dim]— add one line to ~/.bashrc or ~/.zshrc:[/dim]")
+    console.print("  [cyan][ -f ~/.arc-canteen/env ] && . ~/.arc-canteen/env[/cyan]")
+    console.print(f"  [dim]# or: [/dim][cyan]arc-canteen shell-init >> ~/.bashrc[/cyan]")
+    console.print()
+    console.print("[bold]Then $RPC is set. Try it:[/bold]")
+    console.print("  [cyan]cast block-number --rpc-url $RPC[/cyan]              [dim]# foundry[/dim]")
     console.print("  [cyan]cast chain-id      --rpc-url $RPC[/cyan]")
     console.print()
-    console.print("[bold]viem:[/bold]")
-    console.print("  [cyan]import { createPublicClient, http } from 'viem'[/cyan]")
-    console.print("  [cyan]const client = createPublicClient({ transport: http(process.env.RPC) })[/cyan]")
-    console.print()
-    console.print("[bold]ethers v6:[/bold]")
-    console.print("  [cyan]import { JsonRpcProvider } from 'ethers'[/cyan]")
-    console.print("  [cyan]const provider = new JsonRpcProvider(process.env.RPC)[/cyan]")
-    console.print()
-    console.print("[bold]web3.py:[/bold]")
-    console.print("  [cyan]from web3 import Web3[/cyan]")
-    console.print("  [cyan]w3 = Web3(Web3.HTTPProvider(os.environ['RPC']))[/cyan]")
+    console.print("[bold]In code:[/bold]")
+    console.print("  [cyan]http(process.env.RPC)[/cyan]                                                [dim]# viem[/dim]")
+    console.print("  [cyan]new JsonRpcProvider(process.env.RPC)[/cyan]                                 [dim]# ethers v6[/dim]")
+    console.print("  [cyan]Web3(Web3.HTTPProvider(os.environ['RPC']))[/cyan]                           [dim]# web3.py[/dim]")
 
 
 @app.command("rpc-url")
-def rpc_url() -> None:
+def rpc_url(
+    export: Annotated[bool, typer.Option("--export", help="Print `export RPC=<url>` for `eval $(arc-canteen rpc-url --export)`.")] = False,
+) -> None:
     """Print the JSON-RPC URL for the current chain with your server token embedded.
 
-    Pipe-friendly: RPC=$(arc-canteen rpc-url)
+    Plain:    RPC=$(arc-canteen rpc-url)
+    Eval:     eval $(arc-canteen rpc-url --export)
     """
     _require_login()
     token = config.get("auth.server_token")
@@ -291,8 +314,19 @@ def rpc_url() -> None:
         chain = _settings.load().get("chain", "testnet")
         console.print(f"[red]No RPC endpoint configured for chain {chain!r}[/red]")
         raise typer.Exit(1)
-    # Plain print so it's clean for $(arc-canteen rpc-url).
-    print(url)
+    # Plain print so it's clean for $(...) or eval $(...).
+    print(f"export RPC='{url}'" if export else url)
+
+
+@app.command("shell-init")
+def shell_init() -> None:
+    """Print the rc snippet that auto-loads $RPC in every new shell.
+
+    One-time install:
+        arc-canteen shell-init >> ~/.bashrc      # bash
+        arc-canteen shell-init >> ~/.zshrc       # zsh
+    """
+    print('[ -f ~/.arc-canteen/env ] && . ~/.arc-canteen/env')
 
 
 @app.command()
@@ -307,6 +341,12 @@ def logout() -> None:
         cfg = config.load()
         cfg.pop("auth", None)
         config.save(cfg)
+        # Stale $RPC env file would still authenticate against a revoked
+        # token, so wipe it on logout.
+        try:
+            _SHELL_ENV_FILE.unlink()
+        except FileNotFoundError:
+            pass
         console.print("[dim]Logged out.[/dim]")
 
 

@@ -34,7 +34,8 @@ uv tool install --reinstall git+https://github.com/the-canteen-dev/ARC-cli.git
 | `arc-canteen update-product` | Shortcut for `arc-canteen update product` |
 | `arc-canteen submit-puzzle` | Submit your answer to the current puzzle |
 | `arc-canteen rpc <method> [params]` | JSON-RPC call to the configured Arc chain |
-| `arc-canteen rpc-url` | Print the JSON-RPC URL with your token embedded (`RPC=$(arc-canteen rpc-url)`) |
+| `arc-canteen rpc-url [--export]` | Print the JSON-RPC URL with your token embedded |
+| `arc-canteen shell-init` | Print rc snippet that auto-loads `$RPC` in every shell |
 | `arc-canteen context` | Dump agent context (AGENTS.md + paths to docs and samples) |
 | `arc-canteen context sync` | Clone/pull developer docs + samples from context-arc |
 
@@ -82,11 +83,22 @@ arc-canteen rpc eth_blockNumber --raw                    # full envelope
 The proxy enforces a method allowlist; calls to disallowed methods
 return `method '<x>' not allowed by the proxy`.
 
+### Auto-load $RPC
+
+`arc-canteen login` writes `export RPC='<url>'` to `~/.arc-canteen/env`. To make every new shell pick it up, install one line:
+
+```bash
+arc-canteen shell-init >> ~/.bashrc      # or ~/.zshrc
+```
+
+After that, `$RPC` is set in every shell with no per-session step.
+
 ## Local state
 
 - `~/.arc-canteen/config.yaml` — auth + profile + cached updates
 - `~/.arc-canteen/settings.yaml` — chain + event_name
 - `~/.arc-canteen/queue.yaml` — append-only event queue (synced to server)
+- `~/.arc-canteen/env` — `export RPC='…'`; sourced by your shell rc
 
 ## Server
 
