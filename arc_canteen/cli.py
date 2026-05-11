@@ -524,6 +524,16 @@ def _show_dashboard() -> None:
     lines.append(f"  [dim]Email[/dim]     " + (luma_email if luma_email else "[red]not set[/red]"))
     lines.append("")
 
+    # ── RPC URL ── (~85 chars, would wrap awkwardly into the column
+    # alignment above; emit as label + value on two indented lines)
+    server_token = config.get("auth.server_token")
+    if server_token:
+        rpc_url = _rpc.url_for_chain(token=server_token)
+        if rpc_url:
+            lines.append(f"  [dim]RPC[/dim]")
+            lines.append(f"  [bold cyan]{rpc_url}[/bold cyan]")
+            lines.append("")
+
     # ── Recent updates ──
     recent = _recent_updates(5)
     if recent:
