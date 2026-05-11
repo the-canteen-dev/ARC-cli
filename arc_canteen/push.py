@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from . import config
+from . import config, settings
 
 SERVER_URL = "https://arc-cli-server.thecanteenapp.com"
 QUEUE_FILE = Path.home() / ".arc-canteen" / "queue.yaml"
@@ -112,11 +112,23 @@ def push_event(event_type: str, data: dict[str, Any] | None = None) -> None:
     Append an event to queue.yaml and attempt to push all pending events.
     pushed_at marks successful delivery; events are never removed from the file.
     If the server is down this invocation, the event is queued silently.
+
+    Every event carries the current chain + event_name from settings.yaml
+    so the server-side log records which chain and which event-context
+    the action belongs to.
     """
+    try:
+        s = settings.load()
+    except settings.SettingsError:
+        # Bad settings shouldn't break event capture — fall back to defaults.
+        s = dict(settings.DEFAULTS)
+
     event: dict[str, Any] = {
         "type": event_type,
         "occurred_at": _now(),
         "pushed_at": None,
+        "chain": s["chain"],
+        "event_name": s["event_name"],
         **(data or {}),
     }
 
