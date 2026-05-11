@@ -27,6 +27,19 @@ class RPCError(RuntimeError):
     """Auth, allowlist, rate-limit, or transport failure."""
 
 
+def url_for_chain(chain: str | None = None, token: str | None = None) -> str | None:
+    """Public JSON-RPC URL for `chain`. If `token` is given, embed it
+    as the URL-based auth segment (/v1/<token>) — usable in viem,
+    ethers, cast, web3.py with no extra headers. Returns None if the
+    chain has no configured endpoint."""
+    chain = chain or settings.load().get("chain", "testnet")
+    base = CHAIN_RPC_URLS.get(chain)
+    if not base:
+        return None
+    base = base.rstrip("/")
+    return f"{base}/v1/{token}" if token else base + "/"
+
+
 def call(method: str, params: list | None = None, timeout: float = 30.0) -> dict:
     """Make a JSON-RPC call. Returns the parsed response envelope
     (which may contain `result` or `error`). Raises RPCError on

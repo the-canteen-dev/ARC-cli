@@ -226,10 +226,73 @@ def login() -> None:
         "luma_email": config.get("profile.luma_email"),
     })
 
+    # Surface the JSON-RPC URL prominently — this is what users
+    # actually want to do with the CLI session beyond telemetry.
+    _show_rpc_quickstart()
+
     console.print(
         "\nRun [bold cyan]arc-canteen status[/bold cyan] to see your dashboard, "
         "or [bold cyan]arc-canteen --help[/bold cyan] to explore commands."
     )
+
+
+def _show_rpc_quickstart() -> None:
+    """Print the JSON-RPC URL + ready-to-paste examples for cast/viem/ethers/web3.py."""
+    token = config.get("auth.server_token")
+    if not token:
+        return
+    url = _rpc.url_for_chain(token=token)
+    if not url:
+        return
+
+    console.print()
+    console.print(Panel(
+        f"[bold]{url}[/bold]",
+        title="[bold cyan]Your JSON-RPC endpoint[/bold cyan]",
+        border_style="cyan",
+        padding=(0, 1),
+    ))
+    console.print()
+    console.print("[bold]Load into your shell:[/bold]")
+    console.print(f"  [cyan]export RPC='{url}'[/cyan]")
+    console.print("  [dim]# or:[/dim]  [cyan]RPC=$(arc-canteen rpc-url)[/cyan]")
+    console.print()
+    console.print("[bold]foundry / cast:[/bold]")
+    console.print("  [cyan]cast block-number --rpc-url $RPC[/cyan]")
+    console.print("  [cyan]cast chain-id      --rpc-url $RPC[/cyan]")
+    console.print()
+    console.print("[bold]viem:[/bold]")
+    console.print("  [cyan]import { createPublicClient, http } from 'viem'[/cyan]")
+    console.print("  [cyan]const client = createPublicClient({ transport: http(process.env.RPC) })[/cyan]")
+    console.print()
+    console.print("[bold]ethers v6:[/bold]")
+    console.print("  [cyan]import { JsonRpcProvider } from 'ethers'[/cyan]")
+    console.print("  [cyan]const provider = new JsonRpcProvider(process.env.RPC)[/cyan]")
+    console.print()
+    console.print("[bold]web3.py:[/bold]")
+    console.print("  [cyan]from web3 import Web3[/cyan]")
+    console.print("  [cyan]w3 = Web3(Web3.HTTPProvider(os.environ['RPC']))[/cyan]")
+
+
+@app.command("rpc-url")
+def rpc_url() -> None:
+    """Print the JSON-RPC URL for the current chain with your server token embedded.
+
+    Pipe-friendly: RPC=$(arc-canteen rpc-url)
+    """
+    _require_login()
+    token = config.get("auth.server_token")
+    if not token:
+        console.print("[red]No server token; run `arc-canteen login` first.[/red]")
+        raise typer.Exit(1)
+    url = _rpc.url_for_chain(token=token)
+    if not url:
+        from . import settings as _settings
+        chain = _settings.load().get("chain", "testnet")
+        console.print(f"[red]No RPC endpoint configured for chain {chain!r}[/red]")
+        raise typer.Exit(1)
+    # Plain print so it's clean for $(arc-canteen rpc-url).
+    print(url)
 
 
 @app.command()

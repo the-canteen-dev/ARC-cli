@@ -34,6 +34,7 @@ uv tool install --reinstall git+https://github.com/the-canteen-dev/ARC-cli.git
 | `arc-canteen update-product` | Shortcut for `arc-canteen update product` |
 | `arc-canteen submit-puzzle` | Submit your answer to the current puzzle |
 | `arc-canteen rpc <method> [params]` | JSON-RPC call to the configured Arc chain |
+| `arc-canteen rpc-url` | Print the JSON-RPC URL with your token embedded (`RPC=$(arc-canteen rpc-url)`) |
 | `arc-canteen context` | Dump agent context (AGENTS.md + paths to docs and samples) |
 | `arc-canteen context sync` | Clone/pull developer docs + samples from context-arc |
 
