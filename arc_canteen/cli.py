@@ -7,24 +7,43 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from typing import Annotated, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import json as _json
-from pathlib import Path as _Path
 
-from . import config, auth, upgrade
+from . import config, auth, upgrade, paths
 from . import push as _push
 from . import rpc as _rpc
 from . import context as _context
 
 # Sourceable env file. login() writes `export RPC=…` here; users add
 # `[ -f ~/.arc-canteen/env ] && . ~/.arc-canteen/env` to their shell rc.
-_SHELL_ENV_FILE = _Path.home() / ".arc-canteen" / "env"
+_SHELL_ENV_FILE = paths.ARC_DIR / "env"
+
+# RPC/server token lifetime. The server doesn't enforce expiry yet, so
+# this is a client-side policy: the dashboard nudges as a token ages and
+# `arc-canteen rotate-rpc-key` mints a fresh one.
+RPC_KEY_MAX_AGE_DAYS = 90
+RPC_KEY_NUDGE_AFTER_DAYS = RPC_KEY_MAX_AGE_DAYS - 14  # start nudging ~2 weeks out
 
 
 def _write_shell_env(rpc_url: str) -> None:
-    _SHELL_ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _SHELL_ENV_FILE.write_text(f"export RPC='{rpc_url}'\n")
+    paths.secure_write_text(_SHELL_ENV_FILE, f"export RPC='{rpc_url}'\n")
+
+
+def _rpc_key_age() -> Optional[timedelta]:
+    """Age of the current server/RPC token, or None if we have no record
+    of when it was issued (logged in with an older CLI build, say)."""
+    issued = config.get("auth.server_token_issued_at")
+    if not issued:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(issued))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - dt
 
 app = typer.Typer(
     name="arc-canteen",
@@ -149,6 +168,7 @@ def _print_updates(updates: list[dict], full: bool = False) -> None:
 
 @app.callback(invoke_without_command=True)
 def _root(ctx: typer.Context) -> None:
+    paths.ensure_dir()  # tighten ~/.arc-canteen to 0700 even if it predates this
     upgrade.maybe_print_upgrade_notice()
     if config.is_logged_in():
         if not _push.ping():
@@ -329,6 +349,57 @@ def shell_init() -> None:
     print('[ -f ~/.arc-canteen/env ] && . ~/.arc-canteen/env')
 
 
+@app.command("rotate-rpc-key")
+def rotate_rpc_key() -> None:
+    """Mint a fresh RPC/server token and update your local config + $RPC.
+
+    Re-authenticates against the arc-canteen server with your stored
+    GitHub credential — no browser step — replaces the token in
+    ~/.arc-canteen/config.yaml and ~/.arc-canteen/env, and (server
+    permitting) invalidates the previous one. Anything that hard-coded
+    the *old* URL — a project .env, a CI secret — needs the new one.
+    """
+    _require_login()
+    github_token = config.get("auth.github_token")
+    if not github_token:
+        console.print("[red]No stored GitHub credential; run [bold cyan]arc-canteen login[/bold cyan] first.[/red]")
+        raise typer.Exit(1)
+
+    if not _push.ping():
+        console.print("[yellow]arc-canteen server unreachable — try again when it's back up.[/yellow]")
+        raise typer.Exit(1)
+
+    old_token = config.get("auth.server_token")
+    with console.status("[dim]rotating your RPC key...[/dim]"):
+        ok = _push.cli_login(github_token)
+    if not ok:
+        console.print("[red]Rotation failed — the server didn't issue a new token.[/red]")
+        raise typer.Exit(1)
+
+    new_token = config.get("auth.server_token")
+    if not new_token or new_token == old_token:
+        console.print("[yellow]Server returned no new token; nothing changed.[/yellow]")
+        return
+
+    new_url = _rpc.url_for_chain(token=new_token)
+    if new_url:
+        _write_shell_env(new_url)
+
+    console.print("[green]Rotated.[/green] A fresh token is in [cyan]~/.arc-canteen/config.yaml[/cyan].")
+    if new_url:
+        console.print()
+        console.print(Panel(
+            f"[bold]{new_url}[/bold]",
+            title="[bold cyan]New JSON-RPC endpoint[/bold cyan]",
+            border_style="cyan",
+            padding=(0, 1),
+        ))
+        console.print()
+        console.print("  [dim]Updated[/dim] [cyan]~/.arc-canteen/env[/cyan] — run [cyan]source ~/.arc-canteen/env[/cyan] for this shell.")
+    console.print("  [dim]Anything that hard-coded the old URL (a project .env, a CI secret) needs the new one.[/dim]")
+    console.print("  [dim]The previous token is invalidated server-side (a ~1 min auth cache means it may linger briefly).[/dim]")
+
+
 @app.command()
 def logout() -> None:
     """Clear your local credentials."""
@@ -338,6 +409,10 @@ def logout() -> None:
     handle = config.get("auth.github_handle")
     if typer.confirm(f"Log out @{handle}?", default=True):
         _push.push_event("logout", {"github_username": handle})
+        # Best-effort: invalidate the token server-side too, so a copy of
+        # the old $RPC URL stops working. Offline (or an older server
+        # without /auth/logout) just means it ages out instead.
+        _push.server_logout()
         cfg = config.load()
         cfg.pop("auth", None)
         config.save(cfg)
@@ -532,6 +607,23 @@ def _show_dashboard() -> None:
         if rpc_url:
             lines.append(f"  [dim]RPC[/dim]")
             lines.append(f"  [bold cyan]{rpc_url}[/bold cyan]")
+            age = _rpc_key_age()
+            if age is None:
+                lines.append(
+                    "  [yellow]↻ key age unknown — run [bold]arc-canteen rotate-rpc-key[/bold] "
+                    "to refresh it and start tracking[/yellow]"
+                )
+            elif age.days >= RPC_KEY_MAX_AGE_DAYS:
+                lines.append(
+                    f"  [bold red]↻ this key is {age.days}d old (past the {RPC_KEY_MAX_AGE_DAYS}d limit) — "
+                    f"run [bold]arc-canteen rotate-rpc-key[/bold] now[/bold red]"
+                )
+            elif age.days >= RPC_KEY_NUDGE_AFTER_DAYS:
+                left = RPC_KEY_MAX_AGE_DAYS - age.days
+                lines.append(
+                    f"  [yellow]↻ this key is {age.days}d old — rotate within ~{left}d: "
+                    f"[bold]arc-canteen rotate-rpc-key[/bold][/yellow]"
+                )
             lines.append("")
 
     # ── Recent updates ──

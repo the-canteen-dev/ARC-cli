@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from . import config, settings
+from . import config, settings, paths
 
 SERVER_URL = "https://arc-cli-server.thecanteenapp.com"
 QUEUE_FILE = Path.home() / ".arc-canteen" / "queue.yaml"
@@ -39,8 +39,7 @@ def _load_queue() -> list[dict]:
 
 
 def _save_queue(items: list[dict]) -> None:
-    QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(QUEUE_FILE, "w") as f:
+    with paths.secure_open(QUEUE_FILE) as f:
         yaml.dump(items, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
@@ -144,7 +143,9 @@ def push_event(event_type: str, data: dict[str, Any] | None = None) -> None:
 def cli_login(github_token: str) -> bool:
     """
     Exchange a GitHub access token for a server bearer token.
-    Stores the server token in config on success.
+    Stores the server token (and the timestamp it was issued) in config
+    on success. Used both by `arc-canteen login` and by
+    `arc-canteen rotate-rpc-key` — each call mints a fresh token.
     Server being down is not fatal — local login still succeeds.
     """
     if not _server_up:
@@ -162,6 +163,30 @@ def cli_login(github_token: str) -> bool:
         if not server_token:
             return False
         config.set_val("auth.server_token", server_token)
+        # Freshness is tracked client-side: the dashboard nudges as the
+        # token approaches its (CLI-enforced) max age, and rotate-rpc-key
+        # resets the clock.
+        config.set_val("auth.server_token_issued_at", _now())
         return True
+    except (httpx.RequestError, httpx.TimeoutException):
+        return False
+
+
+def server_logout() -> bool:
+    """Ask the server to invalidate the current session token. Best-effort:
+    being offline — or talking to an older server without /auth/logout —
+    just means the token stays valid server-side until it ages out."""
+    if not _server_up:
+        return False
+    token = config.get("auth.server_token")
+    if not token:
+        return False
+    try:
+        resp = httpx.post(
+            f"{SERVER_URL}/auth/logout",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=_TIMEOUT,
+        )
+        return resp.status_code == 200
     except (httpx.RequestError, httpx.TimeoutException):
         return False

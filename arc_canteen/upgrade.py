@@ -13,15 +13,16 @@ import time
 import yaml
 from datetime import datetime, timezone
 from importlib import metadata
-from pathlib import Path
 
 import httpx
 from rich.console import Console
 
+from . import paths
+
 console = Console()
 
 REPO = "the-canteen-dev/ARC-cli"
-CACHE_FILE = Path.home() / ".arc-canteen" / "version_check.yaml"
+CACHE_FILE = paths.ARC_DIR / "version_check.yaml"
 CACHE_TTL_SECONDS = 60 * 60   # 1 hour
 _TIMEOUT = 2
 
@@ -65,9 +66,8 @@ def _load_cache() -> dict | None:
 
 
 def _save_cache(data: dict) -> None:
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(CACHE_FILE, "w") as f:
+        with paths.secure_open(CACHE_FILE) as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except OSError:
         pass

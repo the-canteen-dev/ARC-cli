@@ -2,10 +2,11 @@
 
 import re
 import yaml
-from pathlib import Path
 from typing import Any
 
-CONFIG_DIR = Path.home() / ".arc-canteen"
+from . import paths
+
+CONFIG_DIR = paths.ARC_DIR
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
 # PyYAML auto-parses ISO datetime strings into datetime objects on load.
@@ -30,8 +31,7 @@ def load() -> dict:
 
 
 def save(data: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
+    with paths.secure_open(CONFIG_FILE) as f:
         yaml.dump(data, f, Dumper=_Dumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 

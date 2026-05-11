@@ -24,7 +24,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-CONTEXT_DIR = Path.home() / ".arc-canteen" / "context"
+from . import paths
+
+CONTEXT_DIR = paths.ARC_DIR / "context"
 CONTEXT_REPO_URL = "https://github.com/the-canteen-dev/context-arc.git"
 
 
@@ -38,7 +40,7 @@ def is_synced() -> bool:
 
 def sync() -> None:
     """Clone or pull the context repo into CONTEXT_DIR, including submodules."""
-    CONTEXT_DIR.parent.mkdir(parents=True, exist_ok=True)
+    paths.ensure_dir()  # CONTEXT_DIR.parent is ~/.arc-canteen — keep it 0700
     if (CONTEXT_DIR / ".git").exists():
         # update in place
         try:

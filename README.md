@@ -35,6 +35,7 @@ uv tool install --reinstall git+https://github.com/the-canteen-dev/ARC-cli.git
 | `arc-canteen submit-puzzle` | Submit your answer to the current puzzle |
 | `arc-canteen rpc <method> [params]` | JSON-RPC call to the configured Arc chain |
 | `arc-canteen rpc-url [--export]` | Print the JSON-RPC URL with your token embedded |
+| `arc-canteen rotate-rpc-key` | Mint a fresh token, update `config.yaml` + `$RPC`, invalidate the old one |
 | `arc-canteen shell-init` | Print rc snippet that auto-loads `$RPC` in every shell |
 | `arc-canteen context` | Dump agent context (AGENTS.md + paths to docs and samples) |
 | `arc-canteen context sync` | Clone/pull developer docs + samples from context-arc |
@@ -93,9 +94,23 @@ arc-canteen shell-init >> ~/.bashrc      # or ~/.zshrc
 
 After that, `$RPC` is set in every shell with no per-session step.
 
+### Rotating your key
+
+```bash
+arc-canteen rotate-rpc-key
+```
+
+Mints a fresh token (re-auth via your stored GitHub credential — no browser
+step), rewrites `~/.arc-canteen/config.yaml` and `~/.arc-canteen/env`, and
+invalidates the old token server-side. Update anything that hard-coded the
+old URL (a project `.env`, a CI secret) with the new one.
+
+Tokens are good for 90 days; the dashboard nudges you as that approaches.
+`arc-canteen logout` also invalidates the token server-side.
+
 ## Local state
 
-- `~/.arc-canteen/config.yaml` — auth + profile + cached updates
+- `~/.arc-canteen/config.yaml` — auth (token + when it was issued) + profile + cached updates
 - `~/.arc-canteen/settings.yaml` — chain + event_name
 - `~/.arc-canteen/queue.yaml` — append-only event queue (synced to server)
 - `~/.arc-canteen/env` — `export RPC='…'`; sourced by your shell rc

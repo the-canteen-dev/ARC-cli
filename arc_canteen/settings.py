@@ -21,9 +21,10 @@ Hardening against malicious / accidental large files:
 from __future__ import annotations
 
 import yaml
-from pathlib import Path
 
-SETTINGS_FILE = Path.home() / ".arc-canteen" / "settings.yaml"
+from . import paths
+
+SETTINGS_FILE = paths.ARC_DIR / "settings.yaml"
 
 MAX_BYTES = 10 * 1024              # 10 KB file-size ceiling
 ALLOWED_CHAINS = ("testnet", "mainnet")
@@ -71,8 +72,7 @@ def _validate(raw: dict) -> dict:
 
 def _write_defaults() -> dict:
     """Create the settings file with default values, return them."""
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(SETTINGS_FILE, "w") as f:
+    with paths.secure_open(SETTINGS_FILE) as f:
         yaml.safe_dump(DEFAULTS, f, default_flow_style=False, sort_keys=False)
     return dict(DEFAULTS)
 
