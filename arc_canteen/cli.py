@@ -9,8 +9,11 @@ from rich.table import Table
 from typing import Annotated, Optional
 from datetime import datetime, timezone
 
+import json as _json
+
 from . import config, auth, upgrade
 from . import push as _push
+from . import rpc as _rpc
 
 app = typer.Typer(
     name="arc-canteen",
@@ -260,6 +263,60 @@ def push() -> None:
         console.print("[green]All events pushed.[/green]")
     else:
         console.print(f"[yellow]{remaining} still pending.[/yellow]")
+
+
+# ---------------------------------------------------------------------------
+# arc-canteen rpc — JSON-RPC against the configured Arc chain
+# ---------------------------------------------------------------------------
+
+@app.command()
+def rpc(
+    method: Annotated[str, typer.Argument(help="JSON-RPC method, e.g. eth_blockNumber")],
+    params: Annotated[str, typer.Argument(help="JSON array of params, e.g. '[\"latest\"]'")] = "[]",
+    raw: Annotated[bool, typer.Option("--raw", help="Print the full JSON-RPC envelope instead of just `result`.")] = False,
+) -> None:
+    """Make a JSON-RPC call to the configured Arc chain.
+
+    Examples:
+        arc-canteen rpc eth_blockNumber
+        arc-canteen rpc eth_chainId
+        arc-canteen rpc eth_getBalance '["0xabc...", "latest"]'
+        arc-canteen rpc eth_sendRawTransaction '["0xf86c..."]'
+    """
+    _require_login()
+
+    try:
+        parsed = _json.loads(params)
+    except _json.JSONDecodeError:
+        console.print(f"[red]params must be valid JSON; got:[/red] {params!r}")
+        raise typer.Exit(2)
+    if not isinstance(parsed, list):
+        console.print("[red]params must be a JSON array[/red]")
+        raise typer.Exit(2)
+
+    try:
+        resp = _rpc.call(method, parsed)
+    except _rpc.RPCError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    if raw:
+        console.print_json(_json.dumps(resp))
+        return
+
+    if "error" in resp:
+        e = resp["error"]
+        console.print(f"[red]RPC error {e.get('code')}:[/red] {e.get('message')}")
+        raise typer.Exit(1)
+
+    result = resp.get("result")
+    if isinstance(result, (dict, list)):
+        console.print_json(_json.dumps(result))
+    elif result is None:
+        console.print("null")
+    else:
+        # bare string / number / bool: print on its own line, no quoting
+        console.print(result)
 
 
 # ---------------------------------------------------------------------------
