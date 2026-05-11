@@ -34,6 +34,8 @@ uv tool install --reinstall git+https://github.com/the-canteen-dev/ARC-cli.git
 | `arc-canteen update-product` | Shortcut for `arc-canteen update product` |
 | `arc-canteen submit-puzzle` | Submit your answer to the current puzzle |
 | `arc-canteen rpc <method> [params]` | JSON-RPC call to the configured Arc chain |
+| `arc-canteen context` | Dump agent context (AGENTS.md + paths to docs and samples) |
+| `arc-canteen context sync` | Clone/pull developer docs + samples from context-arc |
 
 ### `arc-canteen profile`
 
@@ -49,6 +51,18 @@ uv tool install --reinstall git+https://github.com/the-canteen-dev/ARC-cli.git
 | `arc-canteen update` | Show recent updates |
 | `arc-canteen update traction` | Submit a traction update |
 | `arc-canteen update product` | Submit a product update |
+
+### Agent context
+
+`arc-canteen context sync` clones [the-canteen-dev/context-arc](https://github.com/the-canteen-dev/context-arc) into `~/.arc-canteen/context/`. That repo bundles developer docs for Arc + Circle plus 5 sample codebases (as submodules). Subsequent `sync` invocations `git pull --recurse-submodules`.
+
+`arc-canteen context` prints `AGENTS.md` plus a flat path manifest — pipe-friendly:
+
+```bash
+arc-canteen context | claude          # or aider / cody / cursor
+arc-canteen context --paths           # just the paths, no entry-point content
+arc-canteen context --full            # also inline every .md / .yaml
+```
 
 ### JSON-RPC
 

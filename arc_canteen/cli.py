@@ -14,6 +14,7 @@ import json as _json
 from . import config, auth, upgrade
 from . import push as _push
 from . import rpc as _rpc
+from . import context as _context
 
 app = typer.Typer(
     name="arc-canteen",
@@ -24,9 +25,14 @@ app = typer.Typer(
 
 profile_app = typer.Typer(help="View and edit your profile.", no_args_is_help=False)
 update_app = typer.Typer(help="Submit traction and product updates.", no_args_is_help=False)
+context_app = typer.Typer(
+    help="Developer docs + sample codebases for Arc + Circle, for agent context.",
+    no_args_is_help=False,
+)
 
 app.add_typer(profile_app, name="profile")
 app.add_typer(update_app, name="update")
+app.add_typer(context_app, name="context")
 
 console = Console()
 
@@ -263,6 +269,72 @@ def push() -> None:
         console.print("[green]All events pushed.[/green]")
     else:
         console.print(f"[yellow]{remaining} still pending.[/yellow]")
+
+
+# ---------------------------------------------------------------------------
+# arc-canteen context — agent-facing docs + sample codebases
+# ---------------------------------------------------------------------------
+
+@context_app.callback(invoke_without_command=True)
+def _context_root(
+    ctx: typer.Context,
+    paths: Annotated[bool, typer.Option("--paths", help="Print only the file/path manifest, no AGENTS.md content.")] = False,
+    full: Annotated[bool, typer.Option("--full", help="Inline the contents of every doc file (not just paths). Big output; useful for stateless agent runtimes.")] = False,
+) -> None:
+    """Dump agent context: AGENTS.md + paths to all docs and samples.
+
+    Run `arc-canteen context sync` first to fetch the bundle from
+    github.com/the-canteen-dev/context-arc.
+
+    The default output gives an agent the entry-point doc plus a flat
+    manifest of every available file — the agent can then read specific
+    files off disk on demand. Use --full to inline doc content too.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+
+    if not _context.is_synced():
+        console.print(
+            f"[yellow]context not synced.[/yellow]\n"
+            f"Run [bold cyan]arc-canteen context sync[/bold cyan] first."
+        )
+        raise typer.Exit(1)
+
+    # Use plain print() so output is pipe-friendly (no Rich markup escaping
+    # by the terminal width or by --no-color terminals).
+    if not paths:
+        entry = _context.read_entry()
+        if entry:
+            print("# AGENTS.md")
+            print()
+            print(entry)
+            print()
+
+    print(f"# Files available in {_context.CONTEXT_DIR}")
+    print()
+    for p in _context.list_paths():
+        print(p)
+
+    if full:
+        print()
+        print("# Doc contents")
+        for rel, content in _context.iter_doc_contents():
+            print()
+            print(f"## {rel}")
+            print()
+            print(content)
+
+
+@context_app.command("sync")
+def context_sync() -> None:
+    """Clone or pull the context-arc repo (with submodules) into ~/.arc-canteen/context/."""
+    with console.status("[dim]syncing developer docs and samples...[/dim]"):
+        try:
+            _context.sync()
+        except _context.ContextError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    console.print(f"[green]Synced to[/green] [bold]{_context.CONTEXT_DIR}[/bold]")
 
 
 # ---------------------------------------------------------------------------
