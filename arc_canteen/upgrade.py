@@ -138,7 +138,7 @@ def maybe_print_upgrade_notice() -> None:
 
     installed_str = ".".join(str(p) for p in installed)
     console.print(
-        f"[yellow]A newer arc-canteen is available: "
-        f"{installed_str} → [bold]{latest_name}[/bold][/yellow]\n"
-        f"[dim]Run [bold cyan]uv tool upgrade arc-canteen[/bold cyan] to upgrade.[/dim]"
+        f"[bold red]⚠ A newer arc-canteen is available: "
+        f"{installed_str} → {latest_name}[/bold red]\n"
+        f"[bold red]  Run [bold yellow]uv tool upgrade arc-canteen[/bold yellow] to upgrade.[/bold red]"
     )
