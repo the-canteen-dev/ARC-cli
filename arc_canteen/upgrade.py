@@ -29,7 +29,9 @@ _TIMEOUT = 2
 def _parse(s: str) -> tuple[int, ...] | None:
     """Lenient semver-ish parse. Strips leading 'v', splits on .-+,
     converts each piece to int until a non-numeric piece is hit.
-    Returns None if no numeric pieces."""
+    Trailing-zero components are stripped so that `0.1` and `0.1.0`
+    compare equal (matching standard semver / packaging.version
+    behavior, rather than raw Python tuple ordering)."""
     s = s.lstrip("vV").strip()
     if not s:
         return None
@@ -39,6 +41,9 @@ def _parse(s: str) -> tuple[int, ...] | None:
             out.append(int(p))
         except ValueError:
             break
+    # Strip trailing zeros so (0,1,0) and (0,1) compare equal.
+    while len(out) > 1 and out[-1] == 0:
+        out.pop()
     return tuple(out) if out else None
 
 
