@@ -14,7 +14,7 @@ from . import push as _push
 
 app = typer.Typer(
     name="arc-canteen",
-    help="arc-canteen CLI — track your project's progress and submit to the Arc testnet.",
+    help="arc-canteen CLI — track your project's progress and submit to Arc.",
     no_args_is_help=False,
     add_completion=True,
 )

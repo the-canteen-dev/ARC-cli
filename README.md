@@ -1,6 +1,6 @@
 # arc-canteen CLI
 
-Track your project's progress and submit to the Arc testnet.
+Track your project's progress and submit to Arc.
 
 ## Installation
 
