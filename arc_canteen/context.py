@@ -45,7 +45,19 @@ def sync() -> None:
         # update in place
         try:
             subprocess.run(
-                ["git", "-C", str(CONTEXT_DIR), "pull", "--recurse-submodules", "--quiet"],
+                ["git", "-C", str(CONTEXT_DIR), "pull", "--ff-only", "--quiet"],
+                check=True,
+            )
+            # Deliberately NOT --recurse-submodules on the pull: when new
+            # submodules have been added upstream, an existing checkout hasn't
+            # initialised them yet, so the pull's recursion prints noisy
+            # "Could not access submodule '...'" warnings (non-fatal, but
+            # alarming). `submodule sync` propagates any URL changes and the
+            # `update --init --recursive` below checks out the recorded commit
+            # for new and changed submodules alike — covering everything the
+            # pull's recursion would have, without the warnings.
+            subprocess.run(
+                ["git", "-C", str(CONTEXT_DIR), "submodule", "sync", "--recursive", "--quiet"],
                 check=True,
             )
             subprocess.run(
