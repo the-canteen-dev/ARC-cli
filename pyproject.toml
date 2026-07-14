@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "arc-canteen"
 version = "0.1.12"
 description = "Arc Canteen CLI — track your project's progress and submit to Arc."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "typer>=0.9.0",
@@ -13,6 +16,11 @@ dependencies = [
     "httpx>=0.24.0",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://thecanteenapp.com"
+Repository = "https://github.com/the-canteen-dev/ARC-cli"
+Documentation = "https://docs.arc.io/arc-chain"
 
 [project.scripts]
 arc-canteen = "arc_canteen.cli:app"
