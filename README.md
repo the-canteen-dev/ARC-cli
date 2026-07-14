@@ -2,11 +2,11 @@
 
 The CLI for you to build your next great project on Arc!
 
-- Use `arc-canteen context | claude` in order to pipe App Kits, Arc Sample Apps and Arc / Circle docs into your build. 
-- Use our testnet RPC once you log in: https://arc-node.thecanteenapp.com/
-- Make yourself known as an Arc + Canteen builder to the Circle + Canteen teams!
+More about Arc here: https://docs.arc.io/arc-chain
 
-This enables Canteen, Arc and Circle to provide you prizes, support and (maybe even) investment as you keep on building!
+- Use `arc-canteen context | claude` in order to pipe App Kits, Arc Sample Apps and Arc / Circle docs into your build. More here: https://github.com/the-canteen-dev/context-arc
+- Use our testnet RPC once you log in: https://arc-node.thecanteenapp.com/
+- Make yourself known as an Arc + Canteen builder to the Circle + Canteen teams! This CLI enables Canteen, Arc and Circle to provide you prizes, support and (maybe even) investment as you keep on building!
 
 Make sure you rotate your key regularly if you're having trouble logging in: `arc-canteen rotate-rpc-key`
 
