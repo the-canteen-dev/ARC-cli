@@ -736,6 +736,10 @@ def _show_dashboard() -> None:
     if not telegram or not luma_email:
         lines.append(f"  {strong} Run [bold]arc-canteen profile-edit[/bold] to complete your profile")
 
+    # Showcase — nudge until a first submission exists locally.
+    if not SHOWCASE_FILE.exists():
+        lines.append(f"  {weak} Run [bold]arc-canteen submit-showcase[/bold] to submit your project for the Arc Showcase  [dim](criteria: https://arc-oss.thecanteenapp.com/)[/dim]")
+
     # Agent context — one persistent line (state-aware, examples inline).
     if _context.is_synced():
         lines.append(f"  {weak} [bold]arc-canteen context | <agent>[/bold] to pipe Arc + Circle docs + samples (arc-commerce, arc-escrow, …)")
