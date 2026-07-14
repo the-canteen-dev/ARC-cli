@@ -20,6 +20,7 @@ from . import config, auth, upgrade, paths
 from . import push as _push
 from . import rpc as _rpc
 from . import context as _context
+from . import wallet as _wallet
 
 # Sourceable env file. login() writes `export RPC=…` here; users add
 # `[ -f ~/.arc-canteen/env ] && . ~/.arc-canteen/env` to their shell rc.
@@ -327,10 +328,24 @@ def login() -> None:
     if luma_email:
         config.set_val("profile.luma_email", luma_email)
 
+    # Funded testnet wallet — every onboarded user gets one. Best-effort:
+    # a failure here never blocks login; the dashboard nudges to retry.
+    wallet_entry = _wallet.load()
+    if wallet_entry is None:
+        try:
+            with console.status("[dim]creating your testnet wallet (funded with $5 USDC)...[/dim]"):
+                wallet_entry = _wallet.request_new()
+            console.print("\n[bold green]Testnet wallet created and funded with $5 USDC[/bold green]")
+            console.print(f"  [bold cyan]{wallet_entry['address']}[/bold cyan]")
+            console.print("  [dim]Run [bold]arc-canteen wallet[/bold] to see the private key.[/dim]")
+        except _wallet.WalletError as e:
+            console.print(f"[yellow]Could not create your testnet wallet ({e}) — run [bold]arc-canteen wallet[/bold] later.[/yellow]")
+
     _push.push_event("profile_edit", {
         "discord": config.get("profile.discord"),
         "telegram": config.get("profile.telegram"),
         "luma_email": config.get("profile.luma_email"),
+        "wallet_address": (wallet_entry or {}).get("address"),
     })
 
     # Persist `export RPC=…` to a sourceable env file before the
@@ -500,6 +515,62 @@ def logout() -> None:
         except FileNotFoundError:
             pass
         console.print("[dim]Logged out.[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# arc-canteen wallet
+# ---------------------------------------------------------------------------
+
+@app.command()
+def wallet() -> None:
+    """Show your funded testnet wallet — or create one if none exists yet.
+
+    The keypair is generated server-side and funded with $5 of native
+    testnet USDC from the Arc faucet. Keys are stored only in
+    ~/.arc-canteen/wallet.yaml (0600) — the server keeps just the address.
+    """
+    _require_login()
+
+    w = _wallet.load()
+    created = False
+    if w is None:
+        console.print("[dim]No wallet yet — requesting a fresh one, funded with $5 testnet USDC...[/dim]")
+        try:
+            with console.status("[dim]creating and funding your wallet...[/dim]"):
+                w = _wallet.request_new()
+        except _wallet.WalletError as e:
+            console.print(f"[red]Could not create wallet:[/red] {e}")
+            raise typer.Exit(1)
+        created = True
+        # Keep the event stream's profile picture current: the wallet
+        # address rides on profile_edit.
+        _push.push_event("profile_edit", {
+            "discord": config.get("profile.discord"),
+            "telegram": config.get("profile.telegram"),
+            "luma_email": config.get("profile.luma_email"),
+            "wallet_address": w["address"],
+        })
+
+    chain = w.get("chain", "testnet")
+    info = _wallet.CHAIN_INFO.get(chain, {})
+    body = (
+        f"[dim]Address[/dim]      [bold cyan]{w['address']}[/bold cyan]\n"
+        f"[dim]Private key[/dim]  {w['private_key']}\n"
+        f"[dim]Chain[/dim]        {chain}"
+        + (f" — chain ID [bold]{info['chain_id']}[/bold]" if info.get("chain_id") else "")
+        + " (native gas token is USDC)"
+    )
+    if info.get("explorer"):
+        body += f"\n[dim]Explorer[/dim]     {info['explorer']}/address/{w['address']}"
+    console.print(Panel(
+        body,
+        title="[bold cyan]Your testnet wallet[/bold cyan]",
+        border_style="cyan",
+        padding=(0, 1),
+    ))
+    if created:
+        console.print("[bold green]Created and funded with $5 testnet USDC.[/bold green]")
+    console.print(f"[dim]Stored in[/dim] [cyan]{_wallet.WALLET_FILE}[/cyan] [dim](0600) — anyone with the private key controls the funds; testnet only.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -704,6 +775,15 @@ def _show_dashboard() -> None:
                 )
             lines.append("")
 
+    # ── Wallet ── (address only here; the private key needs a deliberate
+    # `arc-canteen wallet`, not a dashboard render)
+    w = _wallet.load()
+    if w:
+        lines.append(f"  [dim]Wallet[/dim]")
+        lines.append(f"  [bold cyan]{w['address']}[/bold cyan]")
+        lines.append(f"  [dim]run [bold]arc-canteen wallet[/bold] to see the private key[/dim]")
+        lines.append("")
+
     # ── Recent updates ──
     recent = _recent_updates(5)
     if recent:
@@ -735,6 +815,9 @@ def _show_dashboard() -> None:
 
     if not telegram or not luma_email:
         lines.append(f"  {strong} Run [bold]arc-canteen profile-edit[/bold] to complete your profile")
+
+    if not w:
+        lines.append(f"  {strong} Run [bold]arc-canteen wallet[/bold] to create your testnet wallet funded with $5 USDC")
 
     # Showcase — nudge until a first submission exists locally.
     if not SHOWCASE_FILE.exists():
@@ -1075,6 +1158,7 @@ def profile_edit() -> None:
         "discord": config.get("profile.discord"),
         "telegram": config.get("profile.telegram"),
         "luma_email": config.get("profile.luma_email"),
+        "wallet_address": (_wallet.load() or {}).get("address"),
     })
 
     console.print("\n[green]Profile updated.[/green]")
