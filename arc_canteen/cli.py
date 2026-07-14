@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 import typer
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -240,6 +241,13 @@ def _root(
             console.print("[yellow](server unreachable — changes will sync when it's back up)[/yellow]")
         else:
             _push.drain_queue()
+            pending = _push.pending_count()
+            if pending:
+                reason = f" ({_push.last_push_error})" if _push.last_push_error else ""
+                console.print(
+                    f"[yellow]{pending} event{'s' if pending != 1 else ''} queued, not yet pushed{reason} — "
+                    f"run [bold]arc-canteen push[/bold] to retry.[/yellow]"
+                )
     if ctx.invoked_subcommand is None:
         if not config.is_logged_in():
             console.print(Panel(
@@ -306,9 +314,13 @@ def login() -> None:
     if telegram:
         config.set_val("profile.telegram", f"@{telegram}")
 
-    # Luma email
+    # Email (stored/synced as luma_email — the server expects that key)
+    console.print(
+        "\n[dim]If you joined through a Luma invite, enter the same email you used there.[/dim]\n"
+        "[dim]Make sure it's accurate — we use it to reach you about grants, awards, and other support.[/dim]"
+    )
     while True:
-        luma_email = typer.prompt("Luma invite email", default="").strip()
+        luma_email = typer.prompt("Email", default="").strip()
         if not luma_email or ("@" in luma_email and "." in luma_email.split("@")[-1]):
             break
         console.print("[red]Please enter a valid email address.[/red]")
@@ -511,7 +523,8 @@ def push() -> None:
     if remaining == 0:
         console.print("[green]All events pushed.[/green]")
     else:
-        console.print(f"[yellow]{remaining} still pending.[/yellow]")
+        reason = f" — {_push.last_push_error}" if _push.last_push_error else ""
+        console.print(f"[yellow]{remaining} still pending{reason}.[/yellow]")
 
 
 # ---------------------------------------------------------------------------
@@ -811,6 +824,161 @@ def submit_puzzle() -> None:
     console.print("\n[green]Puzzle answer submitted.[/green]")
 
 
+# ---------------------------------------------------------------------------
+# arc-canteen submit-showcase
+# ---------------------------------------------------------------------------
+
+SHOWCASE_FILE = paths.ARC_DIR / "showcase.yaml"
+
+_SHOWCASE_QUESTION = (
+    "Why should we choose your project? What primitives are you exposing "
+    "that other builders could find useful?\n"
+    "Compared to the code out there for Arc builders (mostly in "
+    "circlefin/arc-* repos), what tools and flows do you add?"
+)
+
+
+def _load_showcase() -> dict:
+    """Prior showcase entry, so re-submissions start pre-filled."""
+    try:
+        with open(SHOWCASE_FILE) as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _save_showcase(entry: dict) -> None:
+    try:
+        with paths.secure_open(SHOWCASE_FILE) as f:
+            yaml.dump(entry, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    except OSError:
+        pass
+
+
+def _prompt_url(label: str, default: str, github: bool, optional: bool = False) -> str:
+    """Prompt for a URL; loops until valid. Optional fields accept empty
+    (and '-' to clear a pre-filled value). Bare domains get https://."""
+    while True:
+        val = typer.prompt(label, default=default).strip()
+        if val == "-" and optional:
+            val = ""
+        if optional and not val:
+            return ""
+        if github and "github.com/" not in val:
+            console.print("[red]Please enter a GitHub URL (github.com/...).[/red]")
+            continue
+        if not github and "." not in val:
+            console.print("[red]Please enter a URL.[/red]")
+            continue
+        if not val.startswith(("http://", "https://")):
+            val = f"https://{val}"
+        return val
+
+
+@app.command("submit-showcase")
+def submit_showcase() -> None:
+    """Submit your project as a candidate for the Arc Showcase."""
+    _require_login()
+    _require_discord()
+
+    prior = _load_showcase()
+
+    console.print(Panel(
+        "[bold]Arc Showcase[/bold] — [cyan]https://arc-showcase.thecanteenapp.com/[/cyan]\n\n"
+        "Submit your project as a candidate for the showcase. To be featured,\n"
+        "you must commit to:\n\n"
+        "  • [bold]Stay open source[/bold] — keep your code open, now and going forward.\n"
+        "  • [bold]Expose useful primitives[/bold] — building blocks other Arc builders can\n"
+        "    pick up (see arc-commerce / arc-p2p-payments for the shape of this).\n"
+        "  • [bold]Document it clearly[/bold] — write down how your code works and how to\n"
+        "    use it, so a builder can get going without reading every line.\n\n"
+        "  • [bold]Bonus: a standalone infra-focused repo[/bold] — a separate repo holding\n"
+        "    just the reusable building blocks, so builders can fork it without\n"
+        "    the rest of your product. For example, Bagwork-fun/Bagwork is a\n"
+        "    main repo, and Bagwork-fun/arc-plugins is its standalone repo.\n\n"
+        "Read more about the criteria at [cyan]https://arc-oss.thecanteenapp.com/[/cyan]",
+        border_style="cyan",
+        padding=(1, 2),
+    ))
+    if prior:
+        console.print("[dim]Pre-filled from your previous submission — edit as needed.[/dim]")
+    console.print()
+
+    repo = _prompt_url("GitHub link to the main repo", prior.get("repo") or "", github=True)
+    live_site = _prompt_url("Link to the live site", prior.get("live_site") or "", github=False)
+    standalone = _prompt_url(
+        "Standalone infra-focused repo (optional, '-' to clear)",
+        prior.get("standalone_repo") or "", github=True, optional=True,
+    )
+
+    console.print(f"\n[bold]{_SHOWCASE_QUESTION}[/bold]\n")
+    prior_pitch = (prior.get("pitch") or "").strip()
+    if prior_pitch:
+        console.print(f"[dim]Previous answer:[/dim]\n{prior_pitch}\n")
+        console.print("[dim](Type a new answer — empty line to finish — or press Enter right away to keep the previous one)[/dim]\n")
+    else:
+        console.print("[dim](Empty line to finish)[/dim]\n")
+
+    # Like _get_multiline_text, but an immediate empty line means
+    # "keep the previous answer" when one exists.
+    lines: list[str] = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        if line == "":
+            if lines or prior_pitch:
+                break
+        else:
+            lines.append(line)
+    pitch = "\n".join(lines).strip() or prior_pitch
+    if not pitch:
+        console.print("[yellow]No answer given — submission cancelled.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print()
+    if not typer.confirm(
+        "I affirm the live site will remain live",
+        default=bool(prior.get("live_site_will_remain_live")),
+    ):
+        console.print("[yellow]The showcase requires a live site that stays live — submission cancelled.[/yellow]")
+        raise typer.Exit(1)
+    if not typer.confirm(
+        "I affirm the repo(s) will remain open source",
+        default=bool(prior.get("repos_will_remain_open")),
+    ):
+        console.print("[yellow]The showcase requires the code to stay open — submission cancelled.[/yellow]")
+        raise typer.Exit(1)
+
+    entry = {
+        "repo": repo,
+        "live_site": live_site,
+        "standalone_repo": standalone or None,
+        "live_site_will_remain_live": True,
+        "repos_will_remain_open": True,
+        "pitch": pitch,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # The server keeps a single append-only event log, so every
+    # (re)submission sends the complete entry as one fresh event.
+    # The commitment booleans stay client-side: submission is cancelled
+    # unless both are affirmed, so they're always true by construction.
+    _push.push_event("submit_showcase", {
+        k: v for k, v in entry.items()
+        if k not in ("submitted_at", "live_site_will_remain_live", "repos_will_remain_open")
+    })
+    _save_showcase(entry)
+
+    console.print("\n[green]Showcase submission sent.[/green]")
+    console.print(
+        f"[dim]Saved to[/dim] [cyan]{SHOWCASE_FILE}[/cyan][dim] — run[/dim] "
+        f"[bold cyan]arc-canteen submit-showcase[/bold cyan][dim] again to edit and resubmit.[/dim]"
+    )
+
+
 def _print_all_updates(kind: str, full: bool = False) -> None:
     traction = config.get("updates.traction") or []
     product = config.get("updates.product") or []
@@ -856,13 +1024,13 @@ def _profile_show() -> None:
         table.add_row("Telegram", telegram)
     email = config.get("profile.luma_email")
     if email:
-        table.add_row("Luma email", email)
+        table.add_row("Email", email)
     console.print(Panel(table, title="[bold]Profile[/bold]", border_style="cyan"))
 
 
 @profile_app.command("edit")
 def profile_edit() -> None:
-    """Edit your Discord handle, Telegram, and Luma email."""
+    """Edit your Discord handle, Telegram, and email."""
     _require_login()
 
     console.print("[bold]Edit profile[/bold]  [dim](Enter to keep current value, '-' to clear optional fields)[/dim]\n")
@@ -883,10 +1051,14 @@ def profile_edit() -> None:
     elif val:
         config.set_val("profile.telegram", val if val.startswith("@") else f"@{val}")
 
-    # Luma email (optional)
+    # Email (optional; stored/synced as luma_email — the server expects that key)
     cur = config.get("profile.luma_email") or ""
+    console.print(
+        "[dim]If you joined through a Luma invite, use the same email you used there. "
+        "We use it to reach you about grants, awards, and other support.[/dim]"
+    )
     while True:
-        val = typer.prompt("Luma invite email (optional, '-' to clear)", default=cur).strip()
+        val = typer.prompt("Email (optional, '-' to clear)", default=cur).strip()
         if val == "-" or not val or ("@" in val and "." in val.split("@")[-1]):
             break
         console.print("[red]Please enter a valid email address.[/red]")

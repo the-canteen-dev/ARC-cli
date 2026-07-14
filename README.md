@@ -41,6 +41,7 @@ uv tool upgrade arc-canteen
 | `arc-canteen update-traction` | Shortcut for `arc-canteen update traction` |
 | `arc-canteen update-product` | Shortcut for `arc-canteen update product` |
 | `arc-canteen submit-puzzle` | Submit your answer to the current puzzle |
+| `arc-canteen submit-showcase` | Submit your project as a candidate for the [Arc Showcase](https://arc-showcase.thecanteenapp.com/) |
 | `arc-canteen rpc <method> [params]` | JSON-RPC call to the configured Arc chain |
 | `arc-canteen rpc-url [--export]` | Print the JSON-RPC URL with your token embedded |
 | `arc-canteen rotate-rpc-key` | Mint a fresh token, update `config.yaml` + `$RPC`, invalidate the old one |
@@ -53,7 +54,7 @@ uv tool upgrade arc-canteen
 | Command | Description |
 |---|---|
 | `arc-canteen profile` | View your profile |
-| `arc-canteen profile edit` | Edit your Discord handle, Telegram, and Luma email |
+| `arc-canteen profile edit` | Edit your Discord handle, Telegram, and email |
 
 ### `arc-canteen update`
 

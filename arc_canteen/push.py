@@ -26,6 +26,10 @@ _PING_TIMEOUT = 2
 # for the remainder of this CLI invocation.
 _server_up: bool = True
 
+# Why the most recent _send() failed, for surfacing to the user —
+# rejected events would otherwise sit in the queue with no explanation.
+last_push_error: str | None = None
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -50,10 +54,13 @@ def _pending(queue: list[dict]) -> list[dict]:
 
 def _send(events: list[dict]) -> bool:
     """POST a batch of events to the server. Returns True on success."""
+    global last_push_error
     if not _server_up:
+        last_push_error = "server unreachable"
         return False
     token = config.get("auth.server_token")
     if not token:
+        last_push_error = "no server token — run `arc-canteen login`"
         return False
     payload = [{k: v for k, v in e.items() if k != "pushed_at"} for e in events]
     try:
@@ -63,8 +70,19 @@ def _send(events: list[dict]) -> bool:
             headers={"Authorization": f"Bearer {token}"},
             timeout=_TIMEOUT,
         )
-        return resp.status_code == 200
-    except (httpx.RequestError, httpx.TimeoutException):
+        if resp.status_code == 200:
+            last_push_error = None
+            return True
+        try:
+            detail = resp.json().get("error")
+        except ValueError:
+            detail = None
+        last_push_error = f"server said {resp.status_code}" + (f": {detail}" if detail else "")
+        if resp.status_code == 401:
+            last_push_error += " — run `arc-canteen rotate-rpc-key` to mint a fresh token"
+        return False
+    except (httpx.RequestError, httpx.TimeoutException) as e:
+        last_push_error = f"network error: {e.__class__.__name__}"
         return False
 
 
