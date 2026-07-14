@@ -13,15 +13,15 @@ Make sure you rotate your key regularly if you're having trouble logging in: `ar
 ## Installation
 
 ```bash
-uv tool install git+https://github.com/the-canteen-dev/ARC-cli.git
+uv tool install arc-canteen
 ```
 
-This places the binary at `~/.local/bin/arc-canteen`.
+This places the binary at `~/.local/bin/arc-canteen`. (`pipx install arc-canteen` or `pip install arc-canteen` also work.)
 
 ## Upgrade
 
 ```bash
-uv tool install --reinstall git+https://github.com/the-canteen-dev/ARC-cli.git
+uv tool upgrade arc-canteen
 ```
 
 ## Commands
