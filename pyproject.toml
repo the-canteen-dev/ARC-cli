@@ -27,3 +27,6 @@ arc-canteen = "arc_canteen.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["arc_canteen"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"

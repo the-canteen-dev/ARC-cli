@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from typing import Annotated, Optional
 from datetime import datetime, timedelta, timezone
+from importlib import metadata
+from pathlib import Path
 
 import json as _json
 
@@ -163,11 +167,72 @@ def _print_updates(updates: list[dict], full: bool = False) -> None:
 
 
 # ---------------------------------------------------------------------------
+# --version
+# ---------------------------------------------------------------------------
+
+def _cli_version() -> str:
+    """Version from pyproject.toml when running out of a source checkout
+    (it may be newer than what's installed); installed metadata otherwise."""
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    try:
+        m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.M)
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    try:
+        return metadata.version("arc-canteen")
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _cli_commit() -> str:
+    """Commit hash of the running code. In a source checkout (incl.
+    editable installs) ask git — a leftover _build_info.py from an old
+    build would lie. Installed copies use the hash baked in by
+    hatch_build.py; a wheel built without git (sdist) → 'unknown'."""
+    pkg_dir = Path(__file__).resolve().parent
+    if (pkg_dir.parent / "pyproject.toml").exists():
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(pkg_dir), "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=2,
+            )
+            if out.returncode == 0 and out.stdout.strip():
+                return out.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        from ._build_info import COMMIT  # baked by hatch_build.py; not in git
+        if COMMIT:
+            return COMMIT
+    except ImportError:
+        pass
+    return "unknown"
+
+
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    # Plain print so it's clean for scripts/$(...).
+    print(f"arc-canteen {_cli_version()} (commit {_cli_commit()})")
+    raise typer.Exit()
+
+
+# ---------------------------------------------------------------------------
 # Root — no subcommand → show status
 # ---------------------------------------------------------------------------
 
 @app.callback(invoke_without_command=True)
-def _root(ctx: typer.Context) -> None:
+def _root(
+    ctx: typer.Context,
+    version: Annotated[bool, typer.Option(
+        "--version",
+        help="Print the CLI version and commit hash, then exit.",
+        callback=_version_callback,
+        is_eager=True,
+    )] = False,
+) -> None:
     paths.ensure_dir()  # tighten ~/.arc-canteen to 0700 even if it predates this
     upgrade.maybe_print_upgrade_notice()
     if config.is_logged_in():

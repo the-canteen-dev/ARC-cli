@@ -8,6 +8,15 @@ dist/
 .venv/
 venv/
 
+# Generated at build time by hatch_build.py
+arc_canteen/_build_info.py
+
+# Maintainer-only release tooling — stays local, out of the public repo
+# and the PyPI sdist (hatchling honors this file). hatch_build.py is NOT
+# here: pyproject.toml references it, every build needs it.
+RELEASING.md
+release.sh
+
 # Tooling
 .ruff_cache/
 .mypy_cache/
