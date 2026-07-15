@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 import httpx
 
 from . import config, paths
+from . import errlog
 from .push import SERVER_URL
 
 WALLET_FILE = paths.ARC_DIR / "wallet.yaml"
@@ -29,7 +30,12 @@ CHAIN_INFO = {
 
 
 class WalletError(RuntimeError):
-    pass
+    """Raised (and logged to ~/.arc-canteen/error.log) on any
+    provisioning failure."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        errlog.log("wallet", message)
 
 
 def load() -> dict | None:

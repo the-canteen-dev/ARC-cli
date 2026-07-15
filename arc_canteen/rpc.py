@@ -14,6 +14,7 @@ from __future__ import annotations
 import httpx
 
 from . import config, settings
+from . import errlog
 
 
 CHAIN_RPC_URLS = {
@@ -24,7 +25,12 @@ CHAIN_RPC_URLS = {
 
 
 class RPCError(RuntimeError):
-    """Auth, allowlist, rate-limit, or transport failure."""
+    """Auth, allowlist, rate-limit, or transport failure. Every raise
+    also lands in ~/.arc-canteen/error.log."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        errlog.log("rpc", message)
 
 
 def url_for_chain(chain: str | None = None, token: str | None = None) -> str | None:

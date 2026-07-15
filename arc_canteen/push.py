@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from . import config, settings, paths
+from . import errlog
 
 SERVER_URL = "https://arc-cli-server.thecanteenapp.com"
 QUEUE_FILE = Path.home() / ".arc-canteen" / "queue.yaml"
@@ -61,6 +62,7 @@ def _send(events: list[dict]) -> bool:
     token = config.get("auth.server_token")
     if not token:
         last_push_error = "no server token — run `arc-canteen login`"
+        errlog.log("push", last_push_error)
         return False
     payload = [{k: v for k, v in e.items() if k != "pushed_at"} for e in events]
     try:
@@ -80,9 +82,11 @@ def _send(events: list[dict]) -> bool:
         last_push_error = f"server said {resp.status_code}" + (f": {detail}" if detail else "")
         if resp.status_code == 401:
             last_push_error += " — run `arc-canteen rotate-rpc-key` to mint a fresh token"
+        errlog.log("push", f"{last_push_error} ({len(payload)} events pending)")
         return False
     except (httpx.RequestError, httpx.TimeoutException) as e:
         last_push_error = f"network error: {e.__class__.__name__}"
+        errlog.log("push", f"{last_push_error} ({len(payload)} events pending)")
         return False
 
 
