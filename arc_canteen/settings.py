@@ -2,7 +2,7 @@
 
 Two keys today:
   chain       — 'testnet' or 'mainnet'  (defaults to testnet)
-  event_name  — short string label      (defaults to 'lepton')
+  event_name  — short string label      (defaults to 'tameion')
 
 These are merged into every event the CLI sends to the server, so the
 server-side event log records which chain and which event the action
@@ -31,7 +31,7 @@ ALLOWED_CHAINS = ("testnet", "mainnet")
 MAX_EVENT_NAME_LEN = 64
 DEFAULTS: dict = {
     "chain": "testnet",
-    "event_name": "lepton",
+    "event_name": "tameion",
 }
 
 
